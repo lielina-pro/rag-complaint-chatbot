@@ -1,0 +1,35 @@
+# --- Data handling ---
+pandas
+numpy
+matplotlib
+seaborn
+
+# --- NLP / chunking ---
+langchain
+langchain-community
+langchain-text-splitters
+
+# --- Embeddings ---
+sentence-transformers
+
+# --- Vector stores ---
+chromadb
+faiss-cpu
+
+# --- LLM / generation ---
+transformers
+torch
+huggingface-hub
+
+# --- UI ---
+gradio
+streamlit
+
+# --- Utilities ---
+python-dotenv
+tqdm
+pyarrow   # for reading the .parquet embeddings file
+
+# --- Dev / testing ---
+pytest
+jupyter

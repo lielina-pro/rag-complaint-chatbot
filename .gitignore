@@ -1,0 +1,39 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (large files — don't commit raw/processed data or vector store)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+vector_store/*
+!vector_store/.gitkeep
+
+# Embeddings / model artifacts
+*.parquet
+*.faiss
+*.index
+*.pkl
+
+# Environment variables / secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+
+# Logs
+*.log
