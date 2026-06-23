@@ -17,7 +17,7 @@ import os
 import gradio as gr
 from dotenv import load_dotenv
 
-load_dotenv()  # loads HF_TOKEN from a .env file in the project root, if present
+load_dotenv(override=True)  # .env always wins, even over a stale HF_TOKEN already set in this shell session
 
 from src.embedding import Embedder
 from src.generator import Generator
