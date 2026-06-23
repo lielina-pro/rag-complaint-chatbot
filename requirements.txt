@@ -29,6 +29,7 @@ streamlit
 python-dotenv
 tqdm
 pyarrow   # for reading the .parquet embeddings file
+tabulate  # required by pandas .to_markdown() (Task 3 evaluation table)
 
 # --- Dev / testing ---
 pytest
