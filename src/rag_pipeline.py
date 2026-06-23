@@ -1,9 +1,11 @@
 """The full RAG pipeline for Task 3: retrieve -> build prompt -> generate.
 
-This is the module Task 4's app.py will import directly.
+This is the module Task 4's app.py imports directly.
 """
 
 from __future__ import annotations
+
+from typing import Iterator, Tuple, List
 
 try:
     from .prompt_template import build_prompt
@@ -36,3 +38,29 @@ class RAGPipeline:
         prompt = build_prompt(chunks, question)
         answer = self.generator.generate(prompt)
         return {"answer": answer, "sources": chunks, "prompt": prompt}
+
+    def answer_stream(self, question: str, k: int | None = None) -> Iterator[Tuple[str, List[dict]]]:
+        """Streaming variant for the Task 4 UI.
+
+        Retrieval happens once up front (it's fast and doesn't change), then
+        the answer is yielded as a growing string each time a new token
+        arrives. Each yield is (answer_so_far, sources) -- sources stay
+        constant across the loop but are included every time so the caller
+        (e.g. a Gradio generator callback) can update both outputs from a
+        single iterator without extra bookkeeping.
+        """
+        k = k if k is not None else self.k
+        chunks = self.retriever.retrieve(question, k=k)
+        prompt = build_prompt(chunks, question)
+
+        partial = ""
+        for token in self.generator.generate_stream(prompt):
+            partial += token
+            yield partial, chunks
+
+        if partial == "":
+            # Some providers occasionally return zero delta chunks for a very
+            # short answer -- fall back to a non-streaming call so the user
+            # still gets a response instead of a blank box.
+            partial = self.generator.generate(prompt)
+            yield partial, chunks
