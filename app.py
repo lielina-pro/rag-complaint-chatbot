@@ -795,7 +795,7 @@ STATUS_ERROR = (
 # ---------------------------------------------------------------------------
 _kpi_html = build_kpi_html(metadata_df) if metadata_df is not None else ""
 
-with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
+with gr.Blocks(title="CrediTrust Complaint Assistant") as demo:
 
     # ── Shared header (visible on both tabs) ──────────────────────────────
     gr.HTML(f"""
@@ -813,7 +813,7 @@ with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
     with gr.Tabs(elem_classes=["tab-nav"]):
 
         # ── Tab 1: Chat ───────────────────────────────────────────────────
-        with gr.Tab("  Ask a Question"):
+        with gr.Tab("💬  Ask a Question"):
 
             with gr.Row(equal_height=False):
 
@@ -843,7 +843,7 @@ with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
                         value='<div class="empty-state">Retrieved complaint excerpts will appear here.</div>')
 
         # ── Tab 2: Analytics ──────────────────────────────────────────────
-        with gr.Tab("  Analytics"):
+        with gr.Tab("📊  Analytics"):
 
             gr.HTML("""
             <div class="analytics-header">
@@ -926,4 +926,4 @@ with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(css=CSS)
