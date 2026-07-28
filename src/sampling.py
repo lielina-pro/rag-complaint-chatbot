@@ -1,9 +1,7 @@
 """Stratified sampling utilities for Task 2.
 
-Building embeddings for the full ~464K-complaint dataset takes several hours
-on standard hardware, so Task 2 works on a stratified sample of ~10K-15K
-complaints that preserves the product-category proportions of the cleaned
-dataset produced in Task 1.
+Builds a representative sample of the cleaned complaint dataset that
+preserves the product-category proportions of the full dataset.
 """
 
 from __future__ import annotations
@@ -17,63 +15,74 @@ def stratified_sample(
     target_n: int,
     random_state: int = 42,
 ) -> pd.DataFrame:
-    """Sample ``target_n`` rows from ``df``, preserving the proportion of each
-    category in ``strat_col`` as closely as possible.
+    """Sample ``target_n`` rows from ``df``, preserving category proportions.
 
-    If a category has fewer rows available than its proportional share, all
-    of that category's rows are kept (no replacement/upsampling), and the
-    final sample size may be slightly under ``target_n`` as a result.
+    If a category has fewer rows than its proportional share, all of that
+    category's rows are kept (no upsampling), so the final count may be
+    slightly under ``target_n``.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Source dataframe (e.g. the Task 1 cleaned/filtered dataset).
+        Source dataframe.
     strat_col : str
         Column to stratify by (e.g. ``"product_category"``).
     target_n : int
         Desired total sample size.
     random_state : int
-        Seed for reproducibility.
+        Random seed for reproducibility.
 
     Returns
     -------
     pd.DataFrame
-        The sampled rows, shuffled, with the original index preserved as a
-        column is not added (caller can ``reset_index`` if desired).
+        Sampled rows, shuffled, with the original index preserved.
     """
     if strat_col not in df.columns:
-        raise ValueError(f"'{strat_col}' not found in dataframe columns: {list(df.columns)}")
+        raise ValueError(
+            f"'{strat_col}' not found in columns: {list(df.columns)}"
+        )
 
-    proportions = df[strat_col].value_counts(normalize=True)
-    category_counts = df[strat_col].value_counts()
-
-    # Proportional target per category, rounded.
-    targets = (proportions * target_n).round().astype(int)
-
-    # Cap each category's target at the number of rows actually available.
+    proportions: pd.Series = df[strat_col].value_counts(normalize=True)
+    category_counts: pd.Series = df[strat_col].value_counts()
+    targets: pd.Series = (proportions * target_n).round().astype(int)
     targets = targets.clip(upper=category_counts)
 
-    sampled_parts = []
+    parts: list[pd.DataFrame] = []
     for category, n in targets.items():
         if n <= 0:
             continue
         subset = df[df[strat_col] == category]
-        sampled_parts.append(subset.sample(n=int(n), random_state=random_state))
+        parts.append(subset.sample(n=int(n), random_state=random_state))
 
-    sample = pd.concat(sampled_parts, ignore_index=False)
-    sample = sample.sample(frac=1, random_state=random_state)  # shuffle
-    return sample
+    sample = pd.concat(parts, ignore_index=False)
+    return sample.sample(frac=1, random_state=random_state)
 
 
 def summarize_sampling(
-    original_df: pd.DataFrame, sample_df: pd.DataFrame, strat_col: str
+    original_df: pd.DataFrame,
+    sample_df: pd.DataFrame,
+    strat_col: str,
 ) -> pd.DataFrame:
-    """Build a side-by-side table comparing category proportions in the
-    original dataset vs. the sample, for inclusion in the report."""
-    orig_pct = original_df[strat_col].value_counts(normalize=True).rename("original_pct")
-    sample_pct = sample_df[strat_col].value_counts(normalize=True).rename("sample_pct")
-    orig_n = original_df[strat_col].value_counts().rename("original_n")
-    sample_n = sample_df[strat_col].value_counts().rename("sample_n")
+    """Return a side-by-side table comparing category proportions.
+
+    Parameters
+    ----------
+    original_df : pd.DataFrame
+        The full cleaned dataset.
+    sample_df : pd.DataFrame
+        The stratified sample.
+    strat_col : str
+        The column used for stratification.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: original_n, sample_n, original_pct, sample_pct.
+    """
+    orig_pct: pd.Series = original_df[strat_col].value_counts(normalize=True).rename("original_pct")
+    sample_pct: pd.Series = sample_df[strat_col].value_counts(normalize=True).rename("sample_pct")
+    orig_n: pd.Series = original_df[strat_col].value_counts().rename("original_n")
+    sample_n: pd.Series = sample_df[strat_col].value_counts().rename("sample_n")
 
     summary = pd.concat([orig_n, sample_n, orig_pct, sample_pct], axis=1)
     summary["original_pct"] = (summary["original_pct"] * 100).round(2)

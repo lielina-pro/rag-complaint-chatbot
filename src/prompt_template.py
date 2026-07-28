@@ -1,37 +1,55 @@
-"""Prompt engineering for Task 3.
+"""Prompt template for the CrediTrust complaint RAG pipeline.
 
-A single, robust template that instructs the LLM to act as a financial
-analyst, rely only on the retrieved context, and explicitly say so when the
-context doesn't contain the answer (this is what keeps the chatbot from
-hallucinating complaint details that were never actually reported).
+The template injects retrieved complaint chunks into a structured prompt
+that tells the model to act as a financial analyst, answer only from the
+provided context, and say so explicitly when the context is insufficient.
 """
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
-PROMPT_TEMPLATE = """You are a financial analyst assistant for CrediTrust. Your task is to answer questions about customer complaints. Use the following retrieved complaint excerpts to formulate your answer. If the context doesn't contain the answer, state that you don't have enough information.
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
-
-
-def build_context_block(chunks: List[dict], text_col: str = "chunk_text") -> str:
-    """Format retrieved chunks into a numbered context block, so the model
-    (and a human reviewer) can trace each part of the answer back to a
-    specific source chunk."""
-    lines = []
-    for i, chunk in enumerate(chunks, start=1):
-        text = chunk.get(text_col) or chunk.get("text") or ""
-        product = chunk.get("product_category", "Unknown product")
-        lines.append(f"[Source {i} | {product}]: {text}")
-    return "\n\n".join(lines)
+SYSTEM_CONTEXT: str = (
+    "You are a financial analyst assistant at CrediTrust Financial. "
+    "Your job is to answer questions about customer complaints based solely "
+    "on the complaint excerpts provided. Be concise, structured, and factual. "
+    "If the provided excerpts do not contain enough information to answer the "
+    "question, say so explicitly rather than speculating."
+)
 
 
-def build_prompt(chunks: List[dict], question: str, text_col: str = "chunk_text") -> str:
-    context = build_context_block(chunks, text_col=text_col)
-    return PROMPT_TEMPLATE.format(context=context, question=question)
+def build_prompt(chunks: List[Dict[str, Any]], question: str) -> str:
+    """Build a RAG prompt from retrieved chunks and a user question.
+
+    Parameters
+    ----------
+    chunks : list of dict
+        Retrieved complaint chunks, each containing at minimum a
+        ``chunk_text`` key and optionally metadata (product_category,
+        company, etc.).
+    question : str
+        The user's plain-English question.
+
+    Returns
+    -------
+    str
+        A fully-formatted prompt ready to be sent to the generator.
+    """
+    context_parts: List[str] = []
+    for i, chunk in enumerate(chunks, 1):
+        text = (chunk.get("chunk_text") or chunk.get("document") or "").strip()
+        product = chunk.get("product_category", "")
+        company = chunk.get("company", "")
+        meta = " | ".join(filter(None, [product, company]))
+        header = f"[Source {i}" + (f" — {meta}" if meta else "") + "]"
+        context_parts.append(f"{header}\n{text}")
+
+    context_block: str = "\n\n".join(context_parts)
+
+    return (
+        f"{SYSTEM_CONTEXT}\n\n"
+        f"Customer complaint excerpts:\n\n"
+        f"{context_block}\n\n"
+        f"Question: {question}\n\n"
+        f"Answer:"
+    )
