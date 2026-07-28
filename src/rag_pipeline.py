@@ -27,15 +27,20 @@ class RAGPipeline:
         Embedding + FAISS search component.
     generator : LLMGenerator
         HF Inference API generation component.
+    k : int
+        Default number of chunks to retrieve per question.
+        Can be overridden per-call in ``answer()`` and ``answer_stream()``.
     """
 
     def __init__(
         self,
         retriever: Retriever,
         generator: LLMGenerator,
+        k: int = 5,
     ) -> None:
         self.retriever: Retriever = retriever
         self.generator: LLMGenerator = generator
+        self.k: int = k
 
     @classmethod
     def from_config(cls, config: "RAGConfig") -> "RAGPipeline":  # type: ignore[name-defined]
