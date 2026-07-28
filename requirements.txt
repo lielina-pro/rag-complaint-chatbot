@@ -25,6 +25,9 @@ huggingface-hub
 gradio
 streamlit
 
+# --- Visualization (analytics dashboard) ---
+plotly
+
 # --- Utilities ---
 python-dotenv
 tqdm

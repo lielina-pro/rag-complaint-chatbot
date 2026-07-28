@@ -1,13 +1,8 @@
-"""Embedding model wrapper for Task 2.
+"""Embedding model wrapper for the RAG pipeline.
 
-We use sentence-transformers/all-MiniLM-L6-v2:
-- Small and fast (~80MB, 384-dim embeddings), so encoding 10K-15K chunks runs
-  in a few minutes on CPU — no GPU required.
-- Strong general-purpose semantic similarity performance for its size,
-  widely used as a baseline for retrieval tasks.
-- Matches the embedding model used for the pre-built full-dataset vector
-  store (Tasks 3-4), so this sample-based pipeline and the full pipeline are
-  directly comparable and a retriever built here would generalize.
+Wraps sentence-transformers so the rest of the pipeline never imports
+SentenceTransformer directly — making it easy to swap models or inject
+a fake embedder in tests without mocking the library.
 """
 
 from __future__ import annotations
@@ -16,28 +11,39 @@ from typing import List
 
 import numpy as np
 
-DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+DEFAULT_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class Embedder:
     """Thin wrapper around a SentenceTransformer model.
 
-    Kept as a class (rather than calling SentenceTransformer directly
-    everywhere) so tests can substitute a dummy embedder without needing to
-    download model weights or have network access.
+    Parameters
+    ----------
+    model_name : str
+        HuggingFace model ID.  Defaults to all-MiniLM-L6-v2, which produces
+        384-dim embeddings, runs on CPU, and matches the pre-built vector store.
     """
 
-    def __init__(self, model_name: str = DEFAULT_MODEL_NAME):
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME) -> None:
         from sentence_transformers import SentenceTransformer  # lazy import
+        self.model_name: str = model_name
+        self.model: SentenceTransformer = SentenceTransformer(model_name)
 
-        self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+    def embed(
+        self,
+        texts: List[str],
+        batch_size: int = 64,
+        show_progress: bool = True,
+    ) -> np.ndarray:
+        """Embed a list of strings and return an (n, dim) float32 array.
 
-    def embed(self, texts: List[str], batch_size: int = 64, show_progress: bool = True) -> np.ndarray:
+        Embeddings are L2-normalised so that inner product == cosine similarity,
+        matching the normalisation applied when the FAISS index was built.
+        """
         return self.model.encode(
             texts,
             batch_size=batch_size,
             show_progress_bar=show_progress,
             convert_to_numpy=True,
-            normalize_embeddings=True,  # so cosine similarity == dot product
+            normalize_embeddings=True,
         )

@@ -1,66 +1,111 @@
-"""The full RAG pipeline for Task 3: retrieve -> build prompt -> generate.
+"""RAG pipeline orchestrator — ties retriever, prompt, and generator together.
 
-This is the module Task 4's app.py imports directly.
+Usage
+-----
+>>> from src.rag_pipeline import RAGPipeline
+>>> result = pipeline.answer("Why are people unhappy with Credit Cards?", k=5)
+>>> print(result["answer"])
+>>> for source in result["sources"]:
+...     print(source["product_category"], source["score"])
 """
 
 from __future__ import annotations
 
-from typing import Iterator, Tuple, List
+from typing import Any, Dict, Generator, List
 
-try:
-    from .prompt_template import build_prompt
-    from .retriever import Retriever
-    from .generator import Generator
-except ImportError:  # running as a standalone script, not as part of the src package
-    from prompt_template import build_prompt
-    from retriever import Retriever
-    from generator import Generator
+from generator import Generator as LLMGenerator
+from prompt_template import build_prompt
+from retriever import Retriever
 
 
 class RAGPipeline:
-    def __init__(self, retriever: Retriever, generator: Generator, k: int = 5):
-        self.retriever = retriever
-        self.generator = generator
-        self.k = k
+    """End-to-end RAG pipeline: retrieve → prompt → generate.
 
-    def answer(self, question: str, k: int | None = None) -> dict:
-        """Run the full pipeline for a single question.
+    Parameters
+    ----------
+    retriever : Retriever
+        Embedding + FAISS search component.
+    generator : LLMGenerator
+        HF Inference API generation component.
+    """
 
-        Returns a dict with:
-          - "answer": the LLM's generated response (str)
-          - "sources": the retrieved chunks used as context (list of dicts,
-            each including the chunk text, its metadata, and similarity score)
-          - "prompt": the exact prompt sent to the LLM (useful for debugging
-            and for the evaluation table in the report)
+    def __init__(
+        self,
+        retriever: Retriever,
+        generator: LLMGenerator,
+    ) -> None:
+        self.retriever: Retriever = retriever
+        self.generator: LLMGenerator = generator
+
+    @classmethod
+    def from_config(cls, config: "RAGConfig") -> "RAGPipeline":  # type: ignore[name-defined]
+        """Build a complete pipeline from a RAGConfig.
+
+        This is the recommended way to instantiate the pipeline in production
+        scripts and the Gradio app — one import, one call, everything wired.
+
+        Example
+        -------
+        >>> from src.config import RAGConfig
+        >>> from src.rag_pipeline import RAGPipeline
+        >>> pipeline = RAGPipeline.from_config(RAGConfig.from_env())
+        >>> result = pipeline.answer("What billing issues are most common?")
         """
-        k = k if k is not None else self.k
-        chunks = self.retriever.retrieve(question, k=k)
-        prompt = build_prompt(chunks, question)
-        answer = self.generator.generate(prompt)
-        return {"answer": answer, "sources": chunks, "prompt": prompt}
+        from embedding import Embedder
+        from generator import Generator as LLMGenerator
+        from vector_index import load_index_and_metadata
 
-    def answer_stream(self, question: str, k: int | None = None) -> Iterator[Tuple[str, List[dict]]]:
-        """Streaming variant for the Task 4 UI.
+        index, metadata_df = load_index_and_metadata(
+            config.index_path, config.metadata_path
+        )
+        embedder = Embedder(config.embedding_model)
+        retriever = Retriever(index, metadata_df, embedder)
+        generator = LLMGenerator.from_config(config)
+        return cls(retriever, generator)
 
-        Retrieval happens once up front (it's fast and doesn't change), then
-        the answer is yielded as a growing string each time a new token
-        arrives. Each yield is (answer_so_far, sources) -- sources stay
-        constant across the loop but are included every time so the caller
-        (e.g. a Gradio generator callback) can update both outputs from a
-        single iterator without extra bookkeeping.
+    def answer(
+        self,
+        question: str,
+        k: int = 5,
+    ) -> Dict[str, Any]:
+        """Retrieve relevant chunks and generate a sourced answer (blocking).
+
+        Parameters
+        ----------
+        question : str
+            Plain-English question from the user.
+        k : int
+            Number of complaint chunks to retrieve.
+
+        Returns
+        -------
+        dict with keys:
+            ``answer``  : str — the generated answer text
+            ``sources`` : list of dict — retrieved chunks with metadata + score
+            ``prompt``  : str — the full prompt sent to the generator
         """
-        k = k if k is not None else self.k
-        chunks = self.retriever.retrieve(question, k=k)
-        prompt = build_prompt(chunks, question)
+        chunks: List[Dict[str, Any]] = self.retriever.retrieve(question, k=k)
+        prompt: str = build_prompt(chunks, question)
+        answer_text: str = self.generator.generate(prompt)
+        return {"answer": answer_text, "sources": chunks, "prompt": prompt}
 
-        partial = ""
-        for token in self.generator.generate_stream(prompt):
-            partial += token
-            yield partial, chunks
+    def answer_stream(
+        self,
+        question: str,
+        k: int = 5,
+    ) -> Generator[Any, None, None]:
+        """Retrieve chunks then stream the answer token-by-token.
 
-        if partial == "":
-            # Some providers occasionally return zero delta chunks for a very
-            # short answer -- fall back to a non-streaming call so the user
-            # still gets a response instead of a blank box.
-            partial = self.generator.generate(prompt)
-            yield partial, chunks
+        Yields
+        ------
+        dict
+            First yield: ``{"sources": [...]}`` — the retrieved chunks,
+            emitted before generation starts so the UI can show sources
+            immediately.
+        str
+            Subsequent yields: individual tokens from the generator stream.
+        """
+        chunks: List[Dict[str, Any]] = self.retriever.retrieve(question, k=k)
+        prompt: str = build_prompt(chunks, question)
+        yield {"sources": chunks}
+        yield from self.generator.generate_stream(prompt)

@@ -1,24 +1,19 @@
 """Text chunking utilities for Task 2.
 
-Long complaint narratives are often ineffective when embedded as a single
-vector — important details get diluted in one big embedding, and retrieval
-granularity suffers. We split each narrative into overlapping chunks before
-embedding.
-
-Defaults (chunk_size=500 characters, chunk_overlap=50 characters) match the
-specification of the pre-built vector store provided for Tasks 3-4, so the
-two are directly comparable.
+Splits long complaint narratives into overlapping chunks before embedding.
+The default parameters (500 chars / 50 overlap) match the pre-built
+full-dataset vector store so the two are directly comparable.
 """
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, List
 
 import pandas as pd
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-DEFAULT_CHUNK_SIZE = 500
-DEFAULT_CHUNK_OVERLAP = 50
+DEFAULT_CHUNK_SIZE: int = 500
+DEFAULT_CHUNK_OVERLAP: int = 50
 
 
 def build_splitter(
@@ -27,9 +22,9 @@ def build_splitter(
 ) -> RecursiveCharacterTextSplitter:
     """Create a RecursiveCharacterTextSplitter.
 
-    RecursiveCharacterTextSplitter tries to split on paragraph/sentence
-    boundaries first and only falls back to a hard character cut, which
-    keeps chunks more semantically coherent than a naive fixed-width split.
+    Tries paragraph/sentence boundaries first, falls back to hard
+    character cuts — keeping chunks more semantically coherent than a
+    naive fixed-width split.
     """
     return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -46,34 +41,48 @@ def chunk_dataframe(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> pd.DataFrame:
-    """Chunk every row's text into one or more overlapping chunks.
+    """Chunk every row's narrative into overlapping sub-texts.
 
-    Returns a new dataframe with one row per chunk, containing:
-      - ``chunk_id``: f"{complaint_id}_{chunk_index}", unique per chunk
-      - ``complaint_id``: copied from ``id_col``
-      - ``chunk_index`` / ``total_chunks``: position within the source row
-      - ``chunk_text``: the chunk's text
-      - all columns listed in ``metadata_cols``, copied through unchanged
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Source complaint dataframe (one row per complaint).
+    text_col : str
+        Column containing the narrative text to chunk.
+    id_col : str
+        Column containing a unique complaint identifier.
+    metadata_cols : iterable of str
+        Columns to copy through from the source row into each chunk record.
+    chunk_size : int
+        Maximum characters per chunk.
+    chunk_overlap : int
+        Characters of overlap between adjacent chunks.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per chunk, containing: chunk_id, complaint_id, chunk_index,
+        total_chunks, chunk_text, and all requested metadata columns.
     """
     splitter = build_splitter(chunk_size, chunk_overlap)
+    meta_cols: List[str] = list(metadata_cols)
+    records: List[dict] = []
 
-    records = []
     for _, row in df.iterrows():
-        text = row[text_col]
+        text: str = row[text_col]
         if not isinstance(text, str) or not text.strip():
             continue
-
-        chunks = splitter.split_text(text)
-        total_chunks = len(chunks)
+        chunks: List[str] = splitter.split_text(text)
+        total: int = len(chunks)
         for idx, chunk_text in enumerate(chunks):
-            record = {
+            record: dict = {
                 "chunk_id": f"{row[id_col]}_{idx}",
                 "complaint_id": row[id_col],
                 "chunk_index": idx,
-                "total_chunks": total_chunks,
+                "total_chunks": total,
                 "chunk_text": chunk_text,
             }
-            for col in metadata_cols:
+            for col in meta_cols:
                 record[col] = row[col]
             records.append(record)
 
