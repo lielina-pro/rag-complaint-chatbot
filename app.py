@@ -98,8 +98,8 @@ def format_sources(chunks: list[dict]) -> str:
         company = chunk.get("company", "")
         score = chunk.get("score")
         text = (chunk.get("chunk_text") or chunk.get("document") or "").strip()
-        if len(text) >= 500:
-            text = text[:497] + "..."   # three dots — not Unicode ellipsis
+        if len(text) > 300:
+           text = text[:297] + "..."   # three dots — not Unicode ellipsis
         score_str = f"· relevance {score:.2f}" if score is not None else ""
         icon = PRODUCT_ICONS.get(product, "📄")
         color = PRODUCT_COLORS.get(product, "#0891B2")
