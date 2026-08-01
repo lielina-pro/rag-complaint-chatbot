@@ -17,25 +17,13 @@ from typing import Generator, Optional
 
 from huggingface_hub import InferenceClient
 
-DEFAULT_MODEL: str = "deepseek-ai/DeepSeek-V3-0324"
+DEFAULT_MODEL: str = "deepseek-ai/DeepSeek-V4-Flash"
 DEFAULT_MAX_NEW_TOKENS: int = 512
 DEFAULT_TEMPERATURE: float = 0.7
 
 
 class Generator:
-    """Wraps the HF Inference API for text generation.
-
-    Parameters
-    ----------
-    model_name : str
-        HuggingFace model ID served via the Inference Providers router.
-    max_new_tokens : int
-        Maximum tokens to generate per answer.
-    temperature : float
-        Sampling temperature (0.0 = deterministic).
-    hf_token : str | None
-        HF access token.  Falls back to the HF_TOKEN environment variable.
-    """
+    """Wraps the HF Inference API for text generation."""
 
     def __init__(
         self,
@@ -48,6 +36,11 @@ class Generator:
         self.max_new_tokens: int = max_new_tokens
         self.temperature: float = temperature
         token = hf_token or os.environ.get("HF_TOKEN", "")
+        if not token:
+            raise ValueError(
+                "HF_TOKEN is required. Add it to your .env file or set it as "
+                "an environment variable before running the app."
+            )
         self.client: InferenceClient = InferenceClient(
             model=model_name, token=token
         )
@@ -63,13 +56,7 @@ class Generator:
         )
 
     def generate(self, prompt: str) -> str:
-        """Generate a complete answer for *prompt* (blocking).
-
-        Returns
-        -------
-        str
-            The generated answer text.
-        """
+        """Generate a complete answer for *prompt* (blocking)."""
         response = self.client.chat_completion(
             messages=[{"role": "user", "content": prompt}],
             max_tokens=self.max_new_tokens,
@@ -78,13 +65,7 @@ class Generator:
         return (response.choices[0].message.content or "").strip()
 
     def generate_stream(self, prompt: str) -> Generator[str, None, None]:
-        """Stream the answer token-by-token.
-
-        Yields
-        ------
-        str
-            Each token (or partial word) as it arrives from the API.
-        """
+        """Stream the answer token-by-token."""
         stream = self.client.chat_completion(
             messages=[{"role": "user", "content": prompt}],
             max_tokens=self.max_new_tokens,
@@ -92,7 +73,7 @@ class Generator:
             stream=True,
         )
         for chunk in stream:
-            if not chunk.choices:          # final empty chunk from some providers
+            if not chunk.choices:
                 continue
             token = chunk.choices[0].delta.content
             if token:
