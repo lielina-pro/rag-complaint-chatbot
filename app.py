@@ -98,7 +98,7 @@ def format_sources(chunks: list[dict]) -> str:
         company = chunk.get("company", "")
         score = chunk.get("score")
         text = (chunk.get("chunk_text") or chunk.get("document") or "").strip()
-        if len(text) > 500:
+        if len(text) >= 500:
             text = text[:497] + "..."   # three dots — not Unicode ellipsis
         score_str = f"· relevance {score:.2f}" if score is not None else ""
         icon = PRODUCT_ICONS.get(product, "📄")
@@ -147,30 +147,14 @@ def ask_question(question: str, k: int):
         full_answer = ""
         sources_html = ""
 
-        for chunk in pipeline.answer_stream(question, k=k):
-            if isinstance(chunk, tuple):
-                text_chunk, raw_sources = chunk
-                if raw_sources:
-                    sources_html = format_sources(
-                        raw_sources if isinstance(raw_sources, list)
-                        else raw_sources.get("sources", [])
-                    )
-                if text_chunk:
-                    full_answer = text_chunk
-                    rendered = render_markdown_bold(full_answer)
-                    yield (
-                        f'<div class="answer-text">{rendered}<span class="cursor">▌</span></div>',
-                        sources_html
-                    )
-            elif isinstance(chunk, dict):
-                sources_html = format_sources(chunk.get("sources", []))
-            else:
-                full_answer += chunk
-                rendered = render_markdown_bold(full_answer)
-                yield (
-                    f'<div class="answer-text">{rendered}<span class="cursor">▌</span></div>',
-                    sources_html
-                )
+        for partial_text, sources in pipeline.answer_stream(question, k=k):
+            sources_html = format_sources(sources)
+            rendered = render_markdown_bold(partial_text)
+            full_answer = partial_text
+            yield (
+                f'<div class="answer-text">{rendered}<span class="cursor">▌</span></div>',
+                sources_html
+            )
 
         rendered = render_markdown_bold(full_answer)
         yield f'<div class="answer-text">{rendered}</div>', sources_html
@@ -449,7 +433,7 @@ STATUS_ERROR = (
 # ---------------------------------------------------------------------------
 _kpi_html = build_kpi_html(metadata_df) if metadata_df is not None else ""
 
-with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
+with gr.Blocks(title="CrediTrust Complaint Assistant") as demo:
 
     gr.HTML(f"""
     <div class="app-header">
@@ -535,4 +519,4 @@ with gr.Blocks(css=CSS, title="CrediTrust Complaint Assistant") as demo:
     clear_btn.click(fn=clear_all, outputs=[question_box, answer_box, sources_box])
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(css=CSS)
